@@ -13,8 +13,7 @@ class MyApp(ShowBase):
         self.teapot.setScale(0.5)
 
         # Camera setup
-        self.camera.setPos(0, 10, -1)
-        self.camera.lookAt(0, 10, 0)
+
         
 
 
