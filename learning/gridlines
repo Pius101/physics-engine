@@ -1,0 +1,236 @@
+from direct.showbase.ShowBase import ShowBase
+from direct.task import Task
+from panda3d.core import LineSegs, NodePath, Vec4, TextNode
+
+
+class CoordinateGrid3DApp(ShowBase):
+    def __init__(self):
+        super().__init__()
+
+        #self.disableMouse()
+
+        self.labels = []
+
+        # Change this to 10 later if you want a bigger grid.
+        # I suggest starting with 5 because the coordinate labels get crowded.
+        self.create_grid(size=20, spacing=1, label_all_points=True)
+
+        # Small teapot at origin
+        self.teapot = self.loader.loadModel("models/teapot")
+        self.teapot.reparentTo(self.render)
+        self.teapot.setPos(0,10, -1)
+        self.teapot.setScale(0.5)
+
+        # Camera setup
+        self.camera.setPos(0, 10, -1)
+        self.camera.lookAt(0, 10, 0)
+
+        # Make all coordinate labels face the camera
+        self.taskMgr.add(self.face_labels_to_camera, "FaceLabelsToCamera")
+
+    def draw_line(self, lines, start, end, colour):
+        lines.setColor(colour)
+        lines.moveTo(*start)
+        lines.drawTo(*end)
+
+    def add_label(self, text, position, colour, scale=0.25):
+        label_node = TextNode(text)
+        label_node.setText(text)
+        label_node.setAlign(TextNode.ACenter)
+        label_node.setTextColor(colour)
+
+        label_np = self.render.attachNewNode(label_node)
+        label_np.setPos(*position)
+        label_np.setScale(scale)
+
+        self.labels.append(label_np)
+        return label_np
+
+    def face_labels_to_camera(self, task):
+        for label in self.labels:
+            label.lookAt(self.camera)
+            label.setHpr(label.getH() + 180, label.getP(), label.getR())
+        return Task.cont
+
+    def create_grid(self, size=5, spacing=1, label_all_points=True):
+        x_colour = Vec4(1, 0.05, 0.05, 1)      # red
+        y_colour = Vec4(0.05, 1, 0.05, 1)      # green
+        z_colour = Vec4(0.05, 0.35, 1, 1)      # blue
+        text_colour = Vec4(1, 1, 1, 1)         # white
+
+        grid_lines = LineSegs()
+        grid_lines.setThickness(1.2)
+
+        # -------------------------------------------------
+        # X-Y floor grid
+        # z = 0
+        # -------------------------------------------------
+        for i in range(-size, size + 1, spacing):
+            # Lines parallel to X axis are red
+            self.draw_line(
+                grid_lines,
+                (-size, i, 0),
+                (size, i, 0),
+                x_colour
+            )
+
+            # Lines parallel to Y axis are green
+            self.draw_line(
+                grid_lines,
+                (i, -size, 0),
+                (i, size, 0),
+                y_colour
+            )
+
+        # -------------------------------------------------
+        # X-Z vertical grid
+        # y = 0
+        # -------------------------------------------------
+        for i in range(0, size + 1, spacing):
+            # Lines parallel to X axis are red
+            self.draw_line(
+                grid_lines,
+                (-size, 0, i),
+                (size, 0, i),
+                x_colour
+            )
+
+            # Lines parallel to Z axis are blue
+            self.draw_line(
+                grid_lines,
+                (i, 0, 0),
+                (i, 0, size),
+                z_colour
+            )
+
+            self.draw_line(
+                grid_lines,
+                (-i, 0, 0),
+                (-i, 0, size),
+                z_colour
+            )
+
+        # -------------------------------------------------
+        # Y-Z vertical grid
+        # x = 0
+        # -------------------------------------------------
+        for i in range(0, size + 1, spacing):
+            # Lines parallel to Y axis are green
+            self.draw_line(
+                grid_lines,
+                (0, -size, i),
+                (0, size, i),
+                y_colour
+            )
+
+            # Lines parallel to Z axis are blue
+            self.draw_line(
+                grid_lines,
+                (0, i, 0),
+                (0, i, size),
+                z_colour
+            )
+
+            self.draw_line(
+                grid_lines,
+                (0, -i, 0),
+                (0, -i, size),
+                z_colour
+            )
+
+        grid_node = grid_lines.create()
+        self.grid = NodePath(grid_node)
+        self.grid.reparentTo(self.render)
+
+        # -------------------------------------------------
+        # Main axes, drawn thicker
+        # -------------------------------------------------
+        axis_lines = LineSegs()
+        axis_lines.setThickness(3.0)
+
+        # X axis
+        self.draw_line(
+            axis_lines,
+            (-size, 0, 0),
+            (size, 0, 0),
+            x_colour
+        )
+
+        # Y axis
+        self.draw_line(
+            axis_lines,
+            (0, -size, 0),
+            (0, size, 0),
+            y_colour
+        )
+
+        # Z axis
+        self.draw_line(
+            axis_lines,
+            (0, 0, 0),
+            (0, 0, size),
+            z_colour
+        )
+
+        axis_node = axis_lines.create()
+        self.axes = NodePath(axis_node)
+        self.axes.reparentTo(self.render)
+
+        # Axis labels
+        self.add_label("+X", (size + 0.6, 0, 0), x_colour, 0.45)
+        self.add_label("-X", (-size - 0.6, 0, 0), x_colour, 0.45)
+        self.add_label("+Y", (0, size + 0.6, 0), y_colour, 0.45)
+        self.add_label("-Y", (0, -size - 0.6, 0), y_colour, 0.45)
+        self.add_label("+Z", (0, 0, size + 0.6), z_colour, 0.45)
+
+        # Origin label
+        self.add_label("(0, 0, 0)", (0.35, 0.35, 0.35), text_colour, 0.25)
+
+        # -------------------------------------------------
+        # Coordinate labels
+        # -------------------------------------------------
+        if label_all_points:
+            added = set()
+
+            # X-Y plane labels, z = 0
+            for x in range(-size, size + 1, spacing):
+                for y in range(-size, size + 1, spacing):
+                    pos = (x, y, 0)
+                    if pos not in added:
+                        added.add(pos)
+                        self.add_label(
+                            f"({x},{y},0)",
+                            (x, y, 0.08),
+                            text_colour,
+                            0.16
+                        )
+
+            # X-Z plane labels, y = 0
+            for x in range(-size, size + 1, spacing):
+                for z in range(1, size + 1, spacing):
+                    pos = (x, 0, z)
+                    if pos not in added:
+                        added.add(pos)
+                        self.add_label(
+                            f"({x},0,{z})",
+                            (x, -0.08, z),
+                            text_colour,
+                            0.16
+                        )
+
+            # Y-Z plane labels, x = 0
+            for y in range(-size, size + 1, spacing):
+                for z in range(1, size + 1, spacing):
+                    pos = (0, y, z)
+                    if pos not in added:
+                        added.add(pos)
+                        self.add_label(
+                            f"(0,{y},{z})",
+                            (0.08, y, z),
+                            text_colour,
+                            0.16
+                        )
+
+
+app = CoordinateGrid3DApp()
+app.run()
